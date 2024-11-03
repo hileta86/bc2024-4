@@ -2,6 +2,8 @@ const http = require('http');
 const fs = require('fs').promises;
 const { Command } = require('commander');
 const path = require('path');
+const superagent = require('superagent');
+
 
 const program = new Command();
 
@@ -33,23 +35,32 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (req.method === 'GET') {
-      const image = await fs.readFile(filePath);
-      res.writeHead(200, { 'Content-Type': 'image/jpeg' });
-      res.end(image);
-    } else if (req.method === 'PUT') {
-      let data = [];
-      req.on('data', chunk => data.push(chunk));
-      req.on('end', async () => {
-        try {
-          await fs.writeFile(filePath, Buffer.concat(data));
-          res.writeHead(201, { 'Content-Type': 'text/plain' });
-          res.end("img cached successfuly.");
-        } catch (error) {
-          console.error("error wrt file:", error);
+      try {
+        const image = await fs.readFile(filePath);
+        res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+        res.end(image);
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          
+          try {
+            const response = await superagent.get(`https://http.cat/${httpCode}`);
+            const imageData = response.body;
+
+        
+            await fs.writeFile(filePath, imageData);
+            res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+            res.end(imageData);
+          } catch (err) {
+            console.error(`error getting img from https://http.cat: ${err.message}`);
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end("img not found on server r cache.");
+          }
+        } else {
+          console.error("Error reading file:", error);
           res.writeHead(500, { 'Content-Type': 'text/plain' });
           res.end("Internal Server Error");
         }
-      });
+      }
     } else if (req.method === 'DELETE') {
       try {
         await fs.unlink(filePath);
